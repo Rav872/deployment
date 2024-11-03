@@ -1,0 +1,133 @@
+services:
+  watchtower:
+    image: containrrr/watchtower
+    command:
+      - "--label-enable"
+      - "--interval"
+      - "30"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json
+
+  reverse-proxy:
+    image: traefik:v3.1
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker"
+      - "--entrypoints.web.address=:80"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=ravinderverma872@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+    restart: unless-stopped
+    ports:
+      # For http
+      - "80:80"
+      - "443:443"
+      # For traffic web UI
+      - "8080:8080"
+    volumes:
+      - letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  model_service:
+    image: ghcr.io/rav872/housevalue:latest
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=redis://cache:6379
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda-1:29092
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.model_service.rule=Host(`housevalue.rav872.com`)"
+      - "traefik.http.routers.model_service.entrypoints=websecure"
+      - "traefik.http.routers.model_service.tls.certresolver=myresolver"
+      - "traefik.http.services.model_service.loadbalancer.server.port=5001"
+      - "com.centurylinklabs.watchtower.enable=true"
+    ports:
+      - 5001:5001
+    tty: true
+    depends_on:
+      cache:
+        condition: service_healthy
+      redpanda-1:
+        condition: service_started
+  
+  redpanda-1:
+    image: docker.redpanda.com/vectorized/redpanda:v22.3.5
+    container_name: redpanda-1
+    command:
+      - redpanda
+      - start
+      - --smp
+      - '1'
+      - --reserve-memory
+      - 0M
+      - --overprovisioned
+      - --node-id
+      - '1'
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda-1:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr
+      - PLAINTEXT://0.0.0.0:28082,OUTSIDE://0.0.0.0:8082
+      - --advertise-pandaproxy-addr
+      - PLAINTEXT://redpanda-1:28082,OUTSIDE://localhost:8082
+      - --rpc-addr
+      - 0.0.0.0:33145
+      - --advertise-rpc-addr
+      - redpanda-1:33145
+    ports:
+      - 8082:8082
+      - 9092:9092
+      - 28082:28082
+      - 29092:29092
+    volumes:
+      - "redpanda_data:/redpanda"
+    healthcheck:
+      test: rpk cluster health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  cache:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - "6381:6379"
+    command: redis-server --save 20 1 --loglevel warning
+    volumes:
+      - cache:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  disater_relief:
+    image: ghcr.io/rav872/crisiaid:latest
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.disater_relief.rule=Host(`crisisaid.rav872.com`)"
+      - "traefik.http.routers.disater_relief.entrypoints=websecure"
+      - "traefik.http.routers.disater_relief.tls.certresolver=myresolver"
+      - "traefik.http.services.disater_relief.loadbalancer.server.port=5001" 
+      - "com.centurylinklabs.watchtower.enable=true"
+    ports:
+      - '5002:5001'
+
+volumes:
+  redpanda_data:
+    driver: local
+  cache:
+    driver: local
+  letsencrypt:
+    driver: local
+secrets:
+  postgres_password:
+    external: true
