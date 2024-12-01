@@ -109,7 +109,7 @@ services:
       retries: 5
 
   disater_relief:
-    image: ghcr.io/rav872/crisiaid:latest
+    image: ghcr.io/rav872/crisisaid:latest
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -120,6 +120,18 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - '5002:5001'
+  fuzion_website:
+    image: ghcr.io/emeraldls/fuzion-website:latest
+    restart: unless-stopped
+    ports:
+      - 4322:4321
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fuzion_website.rule=Host(`fuzioncoolers.com`)"
+      - "traefik.http.routers.fuzion_website.entrypoints=websecure"
+      - "traefik.http.routers.fuzion_website.tls.certresolver=myresolver"
+      - "traefik.http.services.fuzion_website.loadbalancer.server.port=4321" 
+      - "com.centurylinklabs.watchtower.enable=true"
 
 volumes:
   redpanda_data:
