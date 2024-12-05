@@ -109,7 +109,7 @@ services:
       retries: 5
 
   disater_relief:
-    image: ghcr.io/rav872/crisiaid:latest
+    image: ghcr.io/rav872/crisisaid:latest
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
