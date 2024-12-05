@@ -121,7 +121,7 @@ services:
     ports:
       - '5002:5001'
   fuzion_website:
-    image: ghcr.io/emeraldls/fuzion-website:latest
+    image: rav872/fuzion-website:latest
     restart: unless-stopped
     ports:
       - 4322:4321
